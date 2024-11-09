@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart House Plan Drawing Tool</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .toolbar {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .toolbar button {
+            display: block;
+            width: 120px;
+            margin: 5px 0;
+            padding: 8px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toolbar button.active {
+            background: #2E7D32;
+        }
+
+        .toolbar button:hover {
+            opacity: 0.9;
+        }
+
+        .gadget-controls {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .gadget-item {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .gadget-item h3 {
+            margin: 0 0 10px 0;
+        }
+
+        #canvas {
+            border: 1px solid #ccc;
+            cursor: crosshair;
+            background: #f8f8f8;
+        }
+
+        .color-picker {
+            margin: 5px 0;
+        }
+
+        .gadget-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .temp-control {
+            width: 80px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <button id="wallBtn">Draw Wall</button>
+    <button id="doorBtn">Add Door</button>
+    <button id="windowBtn">Add Window</button>
+    <button id="furnitureBtn">Add Furniture</button>
+    <button id="lightBtn">Add Light</button>
+    <button id="acBtn">Add AC</button>
+    <button id="tvBtn">Add TV</button>
+    <button id="speakerBtn">Add Speaker</button>
+    <button id="centralPowerBtn">Add Central Power</button>
+    <button id="fridgeBtn">Add Fridge</button>
+    <button id="cameraBtn">Add Camera</button>
+    <button id="washerBtn">Add Washer</button>
+    <button id="electricWindowBtn">Add Electric Window</button>
+    <button id="electricDoorBtn">Add Electric Door</button>
+    <button id="eraseBtn">Erase</button>
+    <button id="clearBtn">Clear All</button>
+    <div class="color-picker">
+        <label>Color: </label>
+        <input type="color" id="colorPicker" value="#000000">
+    </div>
+</div>
+
+
+<div class="gadget-controls" id="gadgetControls">
+    <h2>Gadget Controls</h2>
+    <!-- Controls will be added here dynamically -->
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const gadgetControls = document.getElementById('gadgetControls');
+
+    let gadgets = [];
+    let gadgetCounter = 0;
+    let isDrawing = false;
+    let currentTool = 'wall';
+    let startX, startY;
+    let elements = [];
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth - 180;
+        canvas.height = window.innerHeight - 40;
+        redrawCanvas();
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const tools = {
+        wall: document.getElementById('wallBtn'),
+        door: document.getElementById('doorBtn'),
+        window: document.getElementById('windowBtn'),
+        furniture: document.getElementById('furnitureBtn'),
+        light: document.getElementById('lightBtn'),
+        ac: document.getElementById('acBtn'),
+        tv: document.getElementById('tvBtn'),
+        speaker: document.getElementById('speakerBtn'),
+        centralPower: document.getElementById('centralPowerBtn'),
+        fridge: document.getElementById('fridgeBtn'),
+        camera: document.getElementById('cameraBtn'),
+        washer: document.getElementById('washerBtn'),
+        electricWindow: document.getElementById('electricWindowBtn'),
+        electricDoor: document.getElementById('electricDoorBtn'),
+        erase: document.getElementById('eraseBtn'),
+        clear: document.getElementById('clearBtn'),
+        color: document.getElementById('colorPicker')
+    };
+
+
+    // Tool selection
+    Object.keys(tools).forEach(tool => {
+        if (tool !== 'color' && tool !== 'clear') {
+            tools[tool].addEventListener('click', () => {
+                Object.values(tools).forEach(btn => {
+                    if (btn.classList) btn.classList.remove('active');
+                });
+                tools[tool].classList.add('active');
+                currentTool = tool;
+            });
+        }
+    });
+
+    tools.clear.addEventListener('click', () => {
+        elements = [];
+        gadgets = [];
+        gadgetControls.innerHTML = '<h2>Gadget Controls</h2>';
+        redrawCanvas();
+    });
+
+    function createGadgetControl(gadget) {
+        const div = document.createElement('div');
+        div.className = 'gadget-item';
+        div.innerHTML = `
+        <h3>${gadget.type} ${gadget.id}</h3>
+        <div class="gadget-label">Power:</div>
+        <label class="switch">
+            <input type="checkbox" id="power-${gadget.id}" ${gadget.power ? 'checked' : ''}>
+            <span class="slider"></span>
+        </label>
+        ${gadget.type === 'AC' ? `
+            <div class="gadget-label">Temperature:</div>
+            <input type="number" id="temp-${gadget.id}"
+                   class="temp-control"
+                   value="${gadget.temperature}"
+                   min="16" max="30"> °C
+        ` : ''}
+        ${gadget.type === 'SPEAKER' ? `
+            <div class="gadget-label">Volume:</div>
+            <input type="range" id="volume-${gadget.id}"
+                   value="${gadget.volume}"
+                   min="0" max="100">
+        ` : ''}
+        ${gadget.type === 'FRIDGE' ? `
+            <div class="gadget-label">Temperature:</div>
+            <input type="number" id="temp-${gadget.id}"
+                   class="temp-control"
+                   value="${gadget.temperature || 4}"
+                   min="-10" max="10"> °C
+        ` : ''}
+        ${gadget.type === 'CAMERA' ? `
+            <div class="gadget-label">Angle:</div>
+            <input type="range" id="angle-${gadget.id}"
+                   value="${gadget.cameraAngle || 0}"
+                   min="0" max="360"> °
+        ` : ''}
+        ${gadget.type === 'WASHER' ? `
+            <div class="gadget-label">Cycle Progress:</div>
+            <input type="range" id="cycle-${gadget.id}"
+                   value="${gadget.volume || 0}"
+                   min="0" max="100"> %
+        ` : ''}
+        ${gadget.type === 'ELECTRIC_WINDOW' || gadget.type === 'ELECTRIC_DOOR' ? `
+            <div class="gadget-label">Status:</div>
+            <select id="status-${gadget.id}">
+                <option value="closed" ${!gadget.isOpen ? 'selected' : ''}>Closed</option>
+                <option value="open" ${gadget.isOpen ? 'selected' : ''}>Open</option>
+            </select>
+        ` : ''}
+    `;
+        gadgetControls.appendChild(div);
+
+        // Event listeners for power switch
+        const powerSwitch = document.getElementById(`power-${gadget.id}`);
+        powerSwitch.addEventListener('change', (e) => {
+            gadget.power = e.target.checked;
+            redrawCanvas();
+        });
+
+        // Additional controls based on gadget type
+        if (gadget.type === 'AC' || gadget.type === 'FRIDGE') {
+            const tempControl = document.getElementById(`temp-${gadget.id}`);
+            tempControl.addEventListener('change', (e) => {
+                gadget.temperature = parseInt(e.target.value, 10);
+                redrawCanvas();
+            });
+        }
+
+        if (gadget.type === 'SPEAKER' || gadget.type === 'WASHER') {
+            const volumeControl = document.getElementById(`volume-${gadget.id}`);
+            volumeControl.addEventListener('change', (e) => {
+                gadget.volume = parseInt(e.target.value, 10);
+                redrawCanvas();
+            });
+        }
+
+        if (gadget.type === 'CAMERA') {
+            const angleControl = document.getElementById(`angle-${gadget.id}`);
+            angleControl.addEventListener('change', (e) => {
+                gadget.cameraAngle = parseInt(e.target.value, 10);
+                redrawCanvas();
+            });
+        }
+
+        if (gadget.type === 'ELECTRIC_WINDOW' || gadget.type === 'ELECTRIC_DOOR') {
+            const statusControl = document.getElementById(`status-${gadget.id}`);
+            statusControl.addEventListener('change', (e) => {
+                gadget.isOpen = e.target.value === 'open';
+                redrawCanvas();
+            });
+        }
+    }
+
+
+    function addGadget(type, x, y) {
+        const gadget = {
+            id: ++gadgetCounter,
+            type: type,
+            x: x,
+            y: y,
+            power: false, // Common property for all gadgets to indicate power status
+            temperature: type === 'AC' || type === 'FRIDGE' ? (type === 'AC' ? 24 : 4) : null, // Temperature control for AC and fridge
+            volume: type === 'SPEAKER' ? 50 : type === 'WASHER' ? 0 : null, // Volume/intensity for speaker and washer
+            cameraAngle: type === 'CAMERA' ? 0 : null, // Angle for camera
+            isOpen: ['ELECTRIC_WINDOW', 'ELECTRIC_DOOR'].includes(type) ? false : null // Open/close state for electric window and door
+        };
+
+        gadgets.push(gadget);
+        createGadgetControl(gadget);
+        return gadget;
+    }
+
+
+    function erase(currentX, currentY) {
+        const eraseRadius = 10;
+        elements = elements.filter(element => {
+            if (element.gadgetId) {
+                const distance = Math.sqrt(
+                    Math.pow(currentX - element.x, 2) +
+                    Math.pow(currentY - element.y, 2)
+                );
+                if (distance < eraseRadius) {
+                    // Remove gadget control
+                    const gadgetIndex = gadgets.findIndex(g => g.id === element.gadgetId);
+                    if (gadgetIndex !== -1) {
+                        gadgets.splice(gadgetIndex, 1);
+                        const control = document.querySelector(`.gadget-item:has(#power-${element.gadgetId})`);
+                        if (control) control.remove();
+                    }
+                    return false;
+                }
+                return true;
+            }
+
+            // For lines and shapes
+            const lineDistance = pointToLineDistance(
+                currentX, currentY,
+                element.startX, element.startY,
+                element.endX, element.endY
+            );
+            return lineDistance > eraseRadius;
+        });
+    }
+
+    function pointToLineDistance(x, y, x1, y1, x2, y2) {
+        const A = x - x1;
+        const B = y - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+
+        if (lenSq !== 0) param = dot / lenSq;
+
+        let xx, yy;
+
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+
+        const dx = x - xx;
+        const dy = y - yy;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function redrawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        elements.forEach(element => {
+            if (element.gadgetId) {
+                drawGadget(element);
+            } else {
+                ctx.beginPath();
+                ctx.strokeStyle = element.color;
+
+                switch(element.tool) {
+                    case 'wall':
+                        ctx.lineWidth = 6;
+                        ctx.moveTo(element.startX, element.startY);
+                        ctx.lineTo(element.endX, element.endY);
+                        ctx.stroke();
+                        break;
+                    case 'door':
+                        ctx.lineWidth = 2;
+                        const doorWidth = element.endX - element.startX;
+                        const doorHeight = 40;
+                        ctx.rect(element.startX, element.startY, doorWidth, doorHeight);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(element.startX, element.startY + doorHeight/2, doorHeight/2, -Math.PI/2, Math.PI/2, true);
+                        ctx.stroke();
+                        break;
+                    case 'window':
+                        ctx.lineWidth = 2;
+                        const winWidth = element.endX - element.startX;
+                        const winHeight = 30;
+                        ctx.rect(element.startX, element.startY, winWidth, winHeight);
+                        ctx.moveTo(element.startX + winWidth/2, element.startY);
+                        ctx.lineTo(element.startX + winWidth/2, element.startY + winHeight);
+                        ctx.moveTo(element.startX, element.startY + winHeight/2);
+                        ctx.lineTo(element.startX + winWidth, element.startY + winHeight/2);
+                        ctx.stroke();
+                        break;
+                    case 'furniture':
+                        ctx.lineWidth = 2;
+                        const furnWidth = element.endX - element.startX;
+                        const furnHeight = furnWidth * 0.6;
+                        ctx.rect(element.startX, element.startY, furnWidth, furnHeight);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(element.startX, element.startY);
+                        ctx.lineTo(element.startX + furnWidth, element.startY + furnHeight);
+                        ctx.moveTo(element.startX + furnWidth, element.startY);
+                        ctx.lineTo(element.startX, element.startY + furnHeight);
+                        ctx.stroke();
+                        break;
+                }
+            }
+        });
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+
+    let isDragging = false;
+    let selectedElement = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    // Add this function to find the closest element to a point
+    function findClosestElement(x, y) {
+        const hitRadius = 10;
+
+        // First check gadgets as they're individual points
+        for (let i = elements.length - 1; i >= 0; i--) {
+            const element = elements[i];
+            if (element.gadgetId) {
+                const distance = Math.sqrt(
+                    Math.pow(x - element.x, 2) +
+                    Math.pow(y - element.y, 2)
+                );
+                if (distance < hitRadius) {
+                    return { element, index: i };
+                }
+            } else {
+                // For other elements, check if click is near any part of the element
+                switch(element.tool) {
+                    case 'wall':
+                    case 'door':
+                    case 'window':
+                    case 'furniture':
+                        const distance = pointToLineDistance(
+                            x, y,
+                            element.startX, element.startY,
+                            element.endX, element.endY
+                        );
+                        if (distance < hitRadius) {
+                            return { element, index: i };
+                        }
+                        break;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Modify the startDrawing function to handle both drawing and dragging
+    function startDrawing(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Check if we're clicking on an existing element
+        const found = findClosestElement(x, y);
+        if (found && currentTool !== 'erase') {
+            isDragging = true;
+            selectedElement = found;
+
+            if (found.element.gadgetId) {
+                dragOffsetX = x - found.element.x;
+                dragOffsetY = y - found.element.y;
+            } else {
+                // For non-gadget elements, store the offset from both start and end points
+                dragOffsetX = x - found.element.startX;
+                dragOffsetY = y - found.element.startY;
+                // Also store the relative position of the end point
+                found.element.relativeEndX = found.element.endX - found.element.startX;
+                found.element.relativeEndY = found.element.endY - found.element.startY;
+            }
+            return;
+        }
+
+        // If not dragging, proceed with normal drawing
+        isDrawing = true;
+        startX = x;
+        startY = y;
+
+        // Add new gadgets to the tool selection logic
+        if (['light', 'ac', 'tv', 'speaker', 'central', 'fridge', 'camera', 'washer', 'electric_window', 'electric_door'].includes(currentTool)) {
+            const gadget = addGadget(currentTool.toUpperCase(), startX, startY);
+            elements.push({
+                tool: currentTool,
+                x: startX,
+                y: startY,
+                gadgetId: gadget.id
+            });
+            redrawCanvas();
+            isDrawing = false;
+        }
+    }
+        // Modify the draw function to handle both drawing and dragging
+    function draw(e) {
+        const rect = canvas.getBoundingClientRect();
+        const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
+
+        if (isDragging && selectedElement) {
+            // Update element position
+            if (selectedElement.element.gadgetId) {
+                selectedElement.element.x = currentX - dragOffsetX;
+                selectedElement.element.y = currentY - dragOffsetY;
+            } else {
+                // Update both start and end points maintaining the relative position
+                selectedElement.element.startX = currentX - dragOffsetX;
+                selectedElement.element.startY = currentY - dragOffsetY;
+                selectedElement.element.endX = selectedElement.element.startX + selectedElement.element.relativeEndX;
+                selectedElement.element.endY = selectedElement.element.startY + selectedElement.element.relativeEndY;
+            }
+            redrawCanvas();
+            return;
+        }
+
+        if (!isDrawing) return;
+
+        redrawCanvas();
+
+        ctx.beginPath();
+        ctx.strokeStyle = tools.color.value;
+
+        switch(currentTool) {
+            case 'wall':
+                drawWall(currentX, currentY);
+                break;
+            case 'door':
+                drawDoor(currentX, currentY);
+                break;
+            case 'window':
+                drawWindow(currentX, currentY);
+                break;
+            case 'furniture':
+                drawFurniture(currentX, currentY);
+                break;
+            case 'erase':
+                erase(currentX, currentY);
+                break;
+        }
+    }
+
+    // Modify the stopDrawing function to handle both drawing and dragging
+    function stopDrawing(e) {
+        if (isDragging) {
+            isDragging = false;
+            selectedElement = null;
+            return;
+        }
+
+        if (!isDrawing) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const endX = e.clientX - rect.left;
+        const endY = e.clientY - rect.top;
+
+        if (!['light', 'ac', 'tv', 'speaker'].includes(currentTool) && currentTool !== 'erase') {
+            elements.push({
+                tool: currentTool,
+                startX,
+                startY,
+                endX,
+                endY,
+                color: tools.color.value
+            });
+        }
+
+        isDrawing = false;
+        redrawCanvas();
+    }
+
+    // Add cursor styles to help indicate draggable elements
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (!isDragging && !isDrawing) {
+            const found = findClosestElement(x, y);
+            if (found && currentTool !== 'erase') {
+                canvas.style.cursor = 'move';
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        }
+    });
+
+    // Modify the existing event listeners to capture touch events for mobile support
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousedown', {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+        canvas.dispatchEvent(mouseEvent);
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+        canvas.dispatchEvent(mouseEvent);
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        const mouseEvent = new MouseEvent('mouseup', {});
+        canvas.dispatchEvent(mouseEvent);
+    });
+    function drawGadget(element) {
+        const gadget = gadgets.find(g => g.id === element.gadgetId);
+        if (!gadget) return;
+
+        ctx.beginPath();
+        ctx.strokeStyle = gadget.power ? '#4CAF50' : '#666';
+        ctx.lineWidth = 2;
+
+        switch(element.tool) {
+            case 'light':
+                // Draw light bulb (existing code)
+                ctx.beginPath();
+                ctx.arc(element.x, element.y, 15, 0, Math.PI * 2);
+                ctx.stroke();
+                if (gadget.power) {
+                    ctx.fillStyle = '#FFEB3B';
+                    ctx.fill();
+                    // Draw light rays
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i * Math.PI) / 4;
+                        ctx.beginPath();
+                        ctx.moveTo(element.x + Math.cos(angle) * 20, element.y + Math.sin(angle) * 20);
+                        ctx.lineTo(element.x + Math.cos(angle) * 30, element.y + Math.sin(angle) * 30);
+                        ctx.stroke();
+                    }
+                }
+                break;
+
+            case 'ac':
+                // Draw AC (existing code)
+                ctx.rect(element.x - 25, element.y - 15, 50, 30);
+                ctx.stroke();
+                if (gadget.power) {
+                    for (let i = 0; i < 3; i++) {
+                        ctx.beginPath();
+                        ctx.arc(element.x - 15 + i * 15, element.y + 25, 5, 0, Math.PI, true);
+                        ctx.stroke();
+                    }
+                }
+                ctx.font = '10px Arial';
+                ctx.fillText(`${gadget.temperature}°C`, element.x - 10, element.y + 5);
+                break;
+
+            case 'tv':
+                // Draw TV (existing code)
+                ctx.rect(element.x - 30, element.y - 20, 60, 40);
+                ctx.stroke();
+                if (gadget.power) {
+                    ctx.fillStyle = '#87CEEB';
+                    ctx.fillRect(element.x - 28, element.y - 18, 56, 36);
+                    ctx.moveTo(element.x - 20, element.y - 10);
+                    ctx.lineTo(element.x + 20, element.y - 10);
+                    ctx.stroke();
+                    ctx.moveTo(element.x - 20, element.y);
+                    ctx.lineTo(element.x + 10, element.y);
+                    ctx.stroke();
+                }
+                break;
+
+            case 'speaker':
+                // Draw speaker (existing code)
+                ctx.rect(element.x - 15, element.y - 20, 30, 40);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(element.x, element.y, 10, 0, Math.PI * 2);
+                ctx.stroke();
+                if (gadget.power) {
+                    const volumeScale = gadget.volume / 100;
+                    for (let i = 1; i <= 3; i++) {
+                        ctx.beginPath();
+                        ctx.arc(element.x + 20, element.y, 5 * i * volumeScale, -Math.PI/2, Math.PI/2);
+                        ctx.stroke();
+                    }
+                }
+                break;
+
+            // New Gadgets
+            case 'central':
+                // Draw central power tool
+                ctx.beginPath();
+                ctx.arc(element.x, element.y, 20, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillText("Central Power", element.x - 20, element.y + 30);
+                break;
+
+            case 'fridge':
+                // Draw fridge
+                ctx.rect(element.x - 20, element.y - 30, 40, 60);
+                ctx.stroke();
+                if (gadget.power) {
+                    ctx.fillText(`${gadget.temperature}°C`, element.x - 10, element.y + 5);
+                }
+                break;
+
+            case 'camera':
+                // Draw camera
+                ctx.beginPath();
+                ctx.arc(element.x, element.y, 10, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(element.x, element.y);
+                ctx.lineTo(element.x + 20 * Math.cos(gadget.cameraAngle), element.y + 20 * Math.sin(gadget.cameraAngle));
+                ctx.stroke();
+                ctx.fillText("Camera", element.x - 15, element.y + 25);
+                break;
+
+            case 'washer':
+                // Draw washer
+                ctx.rect(element.x - 20, element.y - 20, 40, 40);
+                ctx.stroke();
+                if (gadget.power) {
+                    ctx.fillText(`Cycle ${gadget.volume}%`, element.x - 15, element.y + 30);
+                }
+                break;
+
+            case 'electric_window':
+                // Draw electric window
+                ctx.rect(element.x - 20, element.y - 30, 40, 60);
+                ctx.stroke();
+                ctx.fillText(gadget.isOpen ? "Open" : "Closed", element.x - 15, element.y + 35);
+                break;
+
+            case 'electric_door':
+                // Draw electric door
+                ctx.rect(element.x - 15, element.y - 35, 30, 70);
+                ctx.stroke();
+                ctx.fillText(gadget.isOpen ? "Open" : "Closed", element.x - 10, element.y + 40);
+                break;
+        }
+
+        // Add label
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#000';
+        ctx.fillText(`${gadget.type} ${gadget.id}`, element.x - 20, element.y + 35);
+    }
+
+
+    // Initialize the wall tool as active by default
+    tools.wall.classList.add('active');
+
+    // Initial canvas draw
+    redrawCanvas();</script>
